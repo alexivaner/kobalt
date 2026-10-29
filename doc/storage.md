@@ -1,5 +1,11 @@
 # Storage compatibility
 
+The optional `sleep_screen` value `cover_overlay` uses a user-supplied
+`sleep-overlay.png` in the profile directory. The setting retains format
+version 1; a missing setting still selects the stock screen. Artwork is not
+book state or a disposable cache and is never rewritten by the reader. See
+[sleep overlays](sleep-overlays.md) for limits and fallback behavior.
+
 Kobalt separates saved reading data from disposable rendering caches. Storage formats are versioned independently of application releases. Hosts choose the storage directory; `storage::Paths` owns the shared filenames. JSON uses UTF-8. Writes use `QSaveFile` to replace a complete file atomically.
 
 ## Saved reading data

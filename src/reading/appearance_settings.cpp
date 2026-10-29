@@ -78,7 +78,7 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
     choice("bold_reading", {"off", "bold"});
     choice("widows_orphans", {"publisher", "avoid", "allow"});
     choice("marks_sort", {"position", "newest", "oldest"});
-    choice("sleep_screen", {"stock", "cover", "page"});
+    choice("sleep_screen", {"stock", "cover", "page", "cover_overlay"});
     choice("header_footer", {"default", "alternative_a", "alternative_b", "custom"});
     choice("default_menu_view", {"none", "seek", "stats"});
     choice("navigation_bar_buttons", {"chapters", "pages"});

@@ -604,6 +604,8 @@
 "settings.sleep_cover_description" = "Shows the book cover with reading progress and battery status.";
 "settings.sleep_page" = "Kobalt with reading page";
 "settings.sleep_page_description" = "Dims the current page and shows reading progress and battery status.";
+"settings.sleep_cover_overlay" = "Book cover with custom overlay";
+"settings.sleep_cover_overlay_description" = "Adds sleep-overlay.png from your Kobalt profile over this book's cover, without the status panel. Uses the regular cover screen if the PNG is unavailable.";
 "sleep.sleeping" = "Sleeping";
 "sleep.charging" = "Charging";
 "sleep.charged" = "Charged";

@@ -7,6 +7,8 @@
 #include "support/strings.h"
 
 #include <QFontMetrics>
+#include <QFile>
+#include <QImageReader>
 #include <QPainter>
 #include <QtMath>
 
@@ -48,6 +50,33 @@ QImage sleepCoverBackground(const QImage &cover, QSize size) {
     painter.end();
     return background;
 }
+QImage sleepOverlayScreen(QImage background, const QString &path) {
+    constexpr qint64 maximumBytes = 4 * 1024 * 1024;
+    constexpr qint64 maximumPixels = 4 * 1024 * 1024;
+    if (background.isNull() || qint64(background.width()) * background.height() > maximumPixels) {
+        return {};
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() <= 0 || file.size() > maximumBytes) {
+        return {};
+    }
+    QImageReader reader(&file, "png");
+    reader.setAutoDetectImageFormat(false);
+    const auto size = reader.size();
+    if (size.isEmpty() || qint64(size.width()) * size.height() > maximumPixels) {
+        return {};
+    }
+    const auto overlay = reader.read();
+    if (overlay.isNull() || !overlay.hasAlphaChannel()) {
+        return {};
+    }
+    QPainter painter(&background);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.drawImage(background.rect(), overlay);
+    painter.end();
+    return background;
+}
+
 QRect sleepScreenCardRect(QSize size, bool showRemaining) {
     namespace m = ui::metrics::sleep;
     const int inset = qMin(int(m::inset), size.width() / 12);

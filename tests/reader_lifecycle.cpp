@@ -1754,6 +1754,8 @@ private slots:
             << true << true << false << 0 << QString("cover") << false << QString("missing");
         QTest::newRow("page-ignores-native-cover")
             << true << true << false << 0 << QString("page") << true << QString("valid");
+        QTest::newRow("overlay-missing-artwork-falls-back-to-cover")
+            << true << true << false << 0 << QString("cover_overlay") << true << QString();
         QTest::newRow("unsupported-native-cover")
             << false << true << false << 0 << QString("cover") << true << QString("valid");
     }
@@ -1823,7 +1825,7 @@ private slots:
             QCOMPARE(cover.size(), QSize(128, 64));
             QCOMPARE(host.session()->coverThumbnail().size(), QSize(120, 60));
         }
-        const bool useCover = sleep::mode(preferences) == sleep::Mode::Cover && !cover.isNull();
+        const bool useCover = sleep::usesCover(sleep::mode(preferences)) && !cover.isNull();
         const auto background = useCover ? reader::sleepCoverBackground(cover, page->size())
                                          : static_cast<ReadingPage *>(page)->snapshot(true);
         const auto status = chargeState == 2   ? reader::SleepStatus::Charged
@@ -1852,6 +1854,142 @@ private slots:
         QVERIFY(sleep->image.isNull());
         QVERIFY(host.window()->isVisible());
         QTRY_VERIFY(!host.session()->busy());
+    }
+
+    void sleepOverlayBlendsAndBoundsArtwork() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.path() + "/overlay.png";
+        QImage background(8, 8, QImage::Format_RGB32);
+        background.fill(Qt::green);
+        const auto original = background;
+        QImage overlay(2, 2, QImage::Format_ARGB32);
+        overlay.fill(Qt::transparent);
+        overlay.setPixel(0, 0, qRgba(255, 0, 0, 128));
+        overlay.setPixel(1, 1, qRgba(0, 0, 255, 255));
+        QVERIFY(overlay.save(path, "PNG"));
+        const auto composed = reader::sleepOverlayScreen(background, path);
+        QCOMPARE(composed.size(), background.size());
+        QCOMPARE(composed.pixel(0, 0), qRgb(128, 127, 0));
+        QCOMPARE(composed.pixel(7, 0), qRgb(0, 255, 0));
+        QCOMPARE(composed.pixel(7, 7), qRgb(0, 0, 255));
+        QCOMPARE(background, original);
+        QCOMPARE(QImage(path), overlay);
+        QVERIFY(reader::sleepOverlayScreen({}, path).isNull());
+        QVERIFY(reader::sleepOverlayScreen(background, path + ".missing").isNull());
+        QVERIFY(original.save(path, "PNG"));
+        QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
+        QVERIFY(overlay.save(path, "JPG"));
+        QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.write("not a PNG") > 0);
+        }
+        QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.resize(4 * 1024 * 1024 + 1));
+        }
+        QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
+        QImage oversized(2049, 2048, QImage::Format_ARGB32);
+        oversized.fill(Qt::transparent);
+        QVERIFY(oversized.save(path, "PNG"));
+        QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
+        QVERIFY(overlay.save(path, "PNG"));
+        QVERIFY(reader::sleepOverlayScreen(oversized, path).isNull());
+    }
+
+    void coverOverlayUsesTheOpenBook_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("hasCover");
+        for (const bool dark : {false, true}) {
+            QTest::newRow(dark ? "cover-dark" : "cover-light") << dark << true;
+            QTest::newRow(dark ? "missing-cover-landscape-dark" : "missing-cover-landscape-light") << dark << false;
+        }
+    }
+    void coverOverlayUsesTheOpenBook() {
+        QFETCH(bool, dark);
+        QFETCH(bool, hasCover);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        QVERIFY(storage::writeJson(paths.preferences(), {{sleep::preferenceKey, "cover_overlay"}, {"dark_mode", dark}}));
+        QImage artwork(8, 8, QImage::Format_ARGB32);
+        artwork.fill(Qt::transparent);
+        artwork.setPixel(0, 0, qRgba(255, 0, 0, 128));
+        const auto artworkPath = directory.path() + "/sleep-overlay.png";
+        QVERIFY(artwork.save(artworkPath, "PNG"));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        BatteryStatus battery{67, false, false};
+        std::function<void()> batteryChanged;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.battery = [&] { return battery; };
+            services.observeBattery = [&](QObject *, std::function<void()> changed) {
+                batteryChanged = std::move(changed);
+            };
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(hasCover ? coverBook : textBook, hasCover ? nativeSize : QSize(1448, 1072));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *sleepButton = host.window()->findChild<QPushButton *>("rrSleepScreen");
+        QVERIFY(sleepButton && sleepButton->isEnabled());
+        sleepButton->click();
+        auto *overlayChoice = host.window()->findChild<QCheckBox *>("rrSleep_cover_overlay");
+        QTRY_VERIFY(overlayChoice && overlayChoice->isVisible());
+        QVERIFY(host.window()->rect().contains(QRect(overlayChoice->mapTo(host.window(), QPoint()), overlayChoice->size())));
+        QTest::mouseClick(overlayChoice, Qt::LeftButton);
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepScreenPopup"));
+        QImage cover;
+        bool ready = false;
+        host.session()->coverImage({2048, 2048}, [&](QImage image) {
+            cover = std::move(image);
+            ready = true;
+        });
+        QTRY_VERIFY(ready);
+        QCOMPARE(!cover.isNull(), hasCover);
+        auto *pageWidget = host.window()->findChild<QWidget *>("rrPage");
+        QVERIFY(pageWidget);
+        auto *page = static_cast<ReadingPage *>(pageWidget);
+        const auto background = hasCover ? reader::sleepCoverBackground(cover, page->size()) : page->snapshot(true);
+        const auto expected = reader::sleepOverlayScreen(background, artworkPath);
+        QVERIFY(!expected.isNull());
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        QCOMPARE(state->presented, 1);
+        QCOMPARE(state->image, expected);
+        // Charging must not paint a status card over the selected artwork or
+        // trigger another disk read while the device is asleep.
+        artwork.fill(Qt::red);
+        QVERIFY(artwork.save(artworkPath, "PNG"));
+        QVERIFY(batteryChanged);
+        battery = {68, true, false};
+        batteryChanged();
+        QCOMPARE(state->updated, 0);
+        QCOMPARE(state->image, expected);
+        host.window()->wakeReader();
+        QVERIFY(state->image.isNull());
+        QVERIFY(host.window()->isVisible());
+        QTRY_VERIFY(!host.session()->busy());
+        const auto replacedArtwork = reader::sleepOverlayScreen(background, artworkPath);
+        QVERIFY(replacedArtwork != expected);
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        QCOMPARE(state->presented, 2);
+        QCOMPARE(state->image, replacedArtwork);
+        host.window()->wakeReader();
+        QVERIFY(state->image.isNull());
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(storage::readPreferences(paths.preferences()).object.value(sleep::preferenceKey).toString(),
+                 QString("cover_overlay"));
     }
 
     void sleepScreenUpdatesWhilePluggedIn_data() {
@@ -2097,6 +2235,8 @@ private slots:
         QCOMPARE(sleep::mode({{"kobalt_sleep_screen", true}}), sleep::Mode::Cover);
         for (const auto mode : sleep::modes) {
             QCOMPARE(sleep::mode({{sleep::preferenceKey, sleep::value(mode)}, {"kobalt_sleep_screen", true}}), mode);
+            QCOMPARE(appearance::cleanPreferences({{sleep::preferenceKey, sleep::value(mode)}})
+                         .value(sleep::preferenceKey).toString(), sleep::value(mode));
         }
         for (const auto &invalid : {QJsonValue("unknown"), QJsonValue(true), QJsonValue(QJsonValue::Null)}) {
             QCOMPARE(sleep::mode({{sleep::preferenceKey, invalid}, {"kobalt_sleep_screen", true}}), sleep::Mode::Stock);

@@ -209,6 +209,7 @@ private:
     bool exitPending = false, exportRunning = false;
     bool lifecycleHidden = false;
     QImage sleepImage, sleepCover;
+    bool sleepOverlayActive = false;
     QString sleepProgress, sleepRemaining;
     BatteryStatus sleepBattery;
     quint64 sleepCoverRequest = 0;

@@ -12,6 +12,9 @@ QString sleepStatusText(SleepStatus status);
 QString sleepTimeLeft(qint64 milliseconds);
 // Fits the cover without cropping. Unused space is always black.
 QImage sleepCoverBackground(const QImage &cover, QSize size);
+// Paint a bounded transparent PNG over an owned background. Invalid or missing
+// artwork returns an empty image so the caller can use its ordinary sleep screen.
+QImage sleepOverlayScreen(QImage background, const QString &path);
 QRect sleepScreenCardRect(QSize size, bool showRemaining);
 // Takes ownership of one background and paints in place. The caller
 // releases the completed frame to the host before the device suspends.

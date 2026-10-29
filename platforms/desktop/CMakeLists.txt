@@ -244,7 +244,8 @@ if(BUILD_TESTING)
             pageGestureBurstKeepsOnePendingTurn exitThroughReaderAndReopen staleSearchReplyIgnored searchSurvivesReflow
             sleepRequestFreezesOrientationBeforeHandoff closePublishesHeldOrientationBeforeBackgroundPaint
             closeRestoresOrientationBeforeBackgroundPaint rotationOwnership customSleepScreenIsOptIn
-            sleepScreenUpdatesWhilePluggedIn sleepScreenDimsOnlyItsOwnedPage sleepSnapshotMatchesTheDisplayedPage
+            sleepScreenUpdatesWhilePluggedIn sleepOverlayBlendsAndBoundsArtwork coverOverlayUsesTheOpenBook
+            sleepScreenDimsOnlyItsOwnedPage sleepSnapshotMatchesTheDisplayedPage
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours
             sleepScreenModesKeepTheStockDefaultAndMigrateTheOptIn sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation remoteKeyActivityRequiresActiveReading

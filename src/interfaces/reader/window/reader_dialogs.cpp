@@ -728,6 +728,8 @@ QString sleepLabel(sleep::Mode mode) {
         return strings::get("settings.sleep_cover");
     case sleep::Mode::Page:
         return strings::get("settings.sleep_page");
+    case sleep::Mode::CoverOverlay:
+        return strings::get("settings.sleep_cover_overlay");
     }
     return {};
 }
@@ -739,6 +741,8 @@ QString sleepExplanation(sleep::Mode mode) {
         return strings::get("settings.sleep_cover_description");
     case sleep::Mode::Page:
         return strings::get("settings.sleep_page_description");
+    case sleep::Mode::CoverOverlay:
+        return strings::get("settings.sleep_cover_overlay_description");
     }
     return {};
 }

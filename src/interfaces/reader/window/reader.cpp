@@ -136,7 +136,7 @@ void Reader::prepareTransition(std::function<void()> finished, int timeoutMs) {
 void Reader::prepareSleepCover() {
     const auto request = ++sleepCoverRequest;
     sleepCover = {};
-    if (!presentation->supportsSleepScreen() || sleep::mode(preferences) != sleep::Mode::Cover) {
+    if (!presentation->supportsSleepScreen() || !sleep::usesCover(sleep::mode(preferences))) {
         return;
     }
     // Decode off the GUI thread while the book is available. Keep at most
@@ -170,12 +170,17 @@ void Reader::sleepReader() {
     const auto *modal = QApplication::activeModalWidget();
     const bool foreground = !modal || modal == this || isAncestorOf(modal);
     const auto mode = sleep::mode(preferences);
+    sleepOverlayActive = false;
     if (mode != sleep::Mode::Stock && presentation->supportsSleepScreen() && foreground && sleepPixels > 0 &&
         sleepPixels <= 4 * 1024 * 1024 && readyForPresentation() && !appearanceEdit.panelOpen() &&
         !model->temporaryTypography()) {
-        const bool useCover = mode == sleep::Mode::Cover && !sleepCover.isNull();
+        const bool useCover = sleep::usesCover(mode) && !sleepCover.isNull();
         QImage frame = useCover ? sleepCoverBackground(sleepCover, page->size()) : page->snapshot(true);
         if (!frame.isNull()) {
+            if (mode == sleep::Mode::CoverOverlay) {
+                sleepImage = sleepOverlayScreen(frame, book->paths().directory + "/sleep-overlay.png");
+                sleepOverlayActive = !sleepImage.isNull();
+            }
             // Capture only the page, including its header and footer. Menus,
             // dialogs and a temporary typography preview are not sleep content.
             const int percent = qBound(0, int(100.0 * model->page() / qMax(1, model->pages())), 100);
@@ -188,8 +193,10 @@ void Reader::sleepReader() {
             sleepOrientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
             sleepProgress = strings::get("sleep.percent_read").arg(percent);
             sleepRemaining = sleepTimeLeft(remaining);
-            sleepImage = sleepScreenImage(std::move(frame), sleepProgress, sleepRemaining, darkTheme, battery.percent,
-                                          status, !useCover);
+            if (!sleepOverlayActive) {
+                sleepImage = sleepScreenImage(std::move(frame), sleepProgress, sleepRemaining, darkTheme, battery.percent,
+                                              status, !useCover);
+            }
         }
     }
     services.cancelAnimation();
@@ -217,7 +224,7 @@ void Reader::prepareWake() {
 }
 
 void Reader::updateSleepBattery() {
-    if (!lifecycleHidden || sleepImage.isNull()) {
+    if (!lifecycleHidden || sleepImage.isNull() || sleepOverlayActive) {
         return;
     }
     const auto battery = services.battery();
