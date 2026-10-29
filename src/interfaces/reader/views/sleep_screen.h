@@ -15,6 +15,9 @@ QImage sleepCoverBackground(const QImage &cover, QSize size);
 // Paint a bounded transparent PNG over an owned background. Invalid or missing
 // artwork returns an empty image so the caller can use its ordinary sleep screen.
 QImage sleepOverlayScreen(QImage background, const QString &path);
+// Try up to 32 shuffled PNG candidates, then the explicit profile artwork.
+// Each invocation chooses again; the completed image stays fixed during sleep.
+QImage randomSleepOverlayScreen(QImage background, const QString &directory, const QString &fallback);
 QRect sleepScreenCardRect(QSize size, bool showRemaining);
 // Takes ownership of one background and paints in place. The caller
 // releases the completed frame to the host before the device suspends.

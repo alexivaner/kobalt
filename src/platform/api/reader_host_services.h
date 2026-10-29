@@ -38,6 +38,9 @@ struct ReaderHostServices {
     // Optional host-resolved high-resolution cover. The reader decodes it on
     // its worker and falls back to the publication cover if it is unusable.
     QString coverImagePath;
+    // Optional host directory of existing PNG sleep overlays. An empty or
+    // unusable directory falls back to the artwork in the Kobalt profile.
+    QString sleepOverlayDirectory;
     // Optional host reader-selection preference. Both callbacks are supplied
     // together; a successful write affects future book openings.
     std::function<bool()> automaticBookOpening;

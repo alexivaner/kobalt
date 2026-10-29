@@ -1879,6 +1879,10 @@ private slots:
         QVERIFY(reader::sleepOverlayScreen(background, path + ".missing").isNull());
         QVERIFY(original.save(path, "PNG"));
         QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
+        QImage opaqueAlpha(2, 2, QImage::Format_ARGB32);
+        opaqueAlpha.fill(Qt::red);
+        QVERIFY(opaqueAlpha.save(path, "PNG"));
+        QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
         QVERIFY(overlay.save(path, "JPG"));
         QVERIFY(reader::sleepOverlayScreen(background, path).isNull());
         {
@@ -1901,6 +1905,54 @@ private slots:
         QVERIFY(reader::sleepOverlayScreen(oversized, path).isNull());
     }
 
+    void sleepOverlayRandomizesExistingArtwork() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto overlays = directory.path() + "/overlays";
+        QVERIFY(QDir().mkpath(overlays));
+        QImage background(2, 2, QImage::Format_RGB32);
+        background.fill(Qt::green);
+        QImage red(2, 2, QImage::Format_ARGB32);
+        red.fill(Qt::transparent);
+        red.setPixel(0, 0, qRgba(255, 0, 0, 128));
+        QImage blue = red;
+        blue.setPixel(0, 0, qRgba(0, 0, 255, 128));
+        QVERIFY(red.save(overlays + "/red.png", "PNG"));
+        QVERIFY(blue.save(overlays + "/blue.png", "PNG"));
+        const auto fallback = directory.path() + "/fallback.png";
+        QImage fallbackArtwork = red;
+        fallbackArtwork.setPixel(0, 0, qRgba(255, 255, 0, 128));
+        QVERIFY(fallbackArtwork.save(fallback, "PNG"));
+        QVERIFY(fallbackArtwork.save(overlays + "/._metadata.png", "PNG"));
+        QImage opaque = red;
+        opaque.fill(Qt::red);
+        QVERIFY(opaque.save(overlays + "/opaque.png", "PNG"));
+        QFile invalid(overlays + "/invalid.png");
+        QVERIFY(invalid.open(QIODevice::WriteOnly));
+        QVERIFY(invalid.write("invalid") > 0);
+        invalid.close();
+        const auto expectedRed = reader::sleepOverlayScreen(background, overlays + "/red.png");
+        const auto expectedBlue = reader::sleepOverlayScreen(background, overlays + "/blue.png");
+        bool seenRed = false, seenBlue = false;
+        for (int i = 0; i < 64; ++i) {
+            const auto image = reader::randomSleepOverlayScreen(background, overlays, fallback);
+            QVERIFY(image == expectedRed || image == expectedBlue);
+            seenRed = seenRed || image == expectedRed;
+            seenBlue = seenBlue || image == expectedBlue;
+        }
+        QVERIFY(seenRed && seenBlue);
+        QCOMPARE(QImage(overlays + "/red.png"), red);
+        QCOMPARE(QImage(overlays + "/blue.png"), blue);
+        QVERIFY(QFile::remove(overlays + "/red.png"));
+        QVERIFY(QFile::remove(overlays + "/blue.png"));
+        const auto expectedFallback = reader::sleepOverlayScreen(background, fallback);
+        QCOMPARE(reader::randomSleepOverlayScreen(background, overlays, fallback), expectedFallback);
+        QCOMPARE(reader::randomSleepOverlayScreen(background, {}, fallback), expectedFallback);
+        QCOMPARE(reader::randomSleepOverlayScreen(background, overlays + "/missing", fallback), expectedFallback);
+        QVERIFY(QFile::remove(fallback));
+        QVERIFY(reader::randomSleepOverlayScreen(background, overlays, fallback).isNull());
+    }
+
     void coverOverlayUsesTheOpenBook_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<bool>("hasCover");
@@ -1919,13 +1971,16 @@ private slots:
         QImage artwork(8, 8, QImage::Format_ARGB32);
         artwork.fill(Qt::transparent);
         artwork.setPixel(0, 0, qRgba(255, 0, 0, 128));
-        const auto artworkPath = directory.path() + "/sleep-overlay.png";
+        const auto overlays = directory.path() + "/nickel-overlays";
+        QVERIFY(QDir().mkpath(overlays));
+        const auto artworkPath = hasCover ? overlays + "/artwork.png" : directory.path() + "/sleep-overlay.png";
         QVERIFY(artwork.save(artworkPath, "PNG"));
         auto state = std::make_shared<test::SleepPresentationState>();
         BatteryStatus battery{67, false, false};
         std::function<void()> batteryChanged;
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&](ReaderHostServices &services) {
+            services.sleepOverlayDirectory = overlays;
             services.battery = [&] { return battery; };
             services.observeBattery = [&](QObject *, std::function<void()> changed) {
                 batteryChanged = std::move(changed);
@@ -1969,6 +2024,7 @@ private slots:
         // Charging must not paint a status card over the selected artwork or
         // trigger another disk read while the device is asleep.
         artwork.fill(Qt::red);
+        artwork.setPixel(0, 0, qRgba(255, 0, 0, 128));
         QVERIFY(artwork.save(artworkPath, "PNG"));
         QVERIFY(batteryChanged);
         battery = {68, true, false};
@@ -1980,6 +2036,7 @@ private slots:
         QVERIFY(host.window()->isVisible());
         QTRY_VERIFY(!host.session()->busy());
         const auto replacedArtwork = reader::sleepOverlayScreen(background, artworkPath);
+        QVERIFY(!replacedArtwork.isNull());
         QVERIFY(replacedArtwork != expected);
         host.window()->sleepReader();
         host.window()->sleepViewReady();

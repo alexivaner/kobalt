@@ -126,6 +126,7 @@ private:
 }
 ReaderHostServices readerHostServices() {
     ReaderHostServices result;
+    result.sleepOverlayDirectory = QStringLiteral("/mnt/onboard/.adds/screensaver");
     result.colorDisplay = [] {
         return pageAnimationPanel() == AnimationPanel::Colour;
     };

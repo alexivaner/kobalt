@@ -178,7 +178,8 @@ void Reader::sleepReader() {
         QImage frame = useCover ? sleepCoverBackground(sleepCover, page->size()) : page->snapshot(true);
         if (!frame.isNull()) {
             if (mode == sleep::Mode::CoverOverlay) {
-                sleepImage = sleepOverlayScreen(frame, book->paths().directory + "/sleep-overlay.png");
+                sleepImage = randomSleepOverlayScreen(frame, services.sleepOverlayDirectory,
+                                                      book->paths().directory + "/sleep-overlay.png");
                 sleepOverlayActive = !sleepImage.isNull();
             }
             // Capture only the page, including its header and footer. Menus,

@@ -5,12 +5,20 @@ to combine the current publication's cover with a transparent PNG. This uses
 Kobalt's cover for the open book, rather than Nickel's last native reading cover.
 The mode is opt-in; the default and existing cover/page modes are unchanged.
 
-Place your artwork at `sleep-overlay.png` in the Kobalt profile. On Kobo, this
-is `.adds/kobalt/sleep-overlay.png`. Transparent pixels reveal the cover;
+On Kobo, the reader randomly chooses a transparent PNG from the existing
+Nickel Screensaver folder, `.adds/screensaver`, each time it sleeps. This does
+not move, resize or rewrite those files. Fully opaque wallpapers, hidden
+macOS metadata files, invalid images and oversized files are ignored. A random
+choice can repeat the previous image. At most 32 shuffled candidates are tried
+per sleep request to bound decoding work.
+
+If that folder has no usable overlay, place fallback artwork at
+`sleep-overlay.png` in the Kobalt profile. On Kobo, this is
+`.adds/kobalt/sleep-overlay.png`. Transparent pixels reveal the cover;
 semi-transparent pixels blend with it. Use your screen's dimensions for the
 best result. Other dimensions are stretched to fit the complete screen. The
-original file is never modified. Existing Nickel Screensaver PNG artwork can
-be copied to this path; Nickel Screensaver itself is not required.
+original file is never modified. On hosts without an overlay directory, this
+single profile image is used. Nickel Screensaver itself is not required.
 
 The completed screen has no Kobalt status card, so the artwork is not covered
 by progress or charging labels. If the book has no usable cover, its current
@@ -20,7 +28,7 @@ card. PNG files must be at most 4 MiB encoded and 4,194,304 decoded pixels.
 The optional mode retains settings format version 1 and does not invalidate
 reading data or document caches. Older builds do not support the new mode.
 
-Artwork is read and composited before the sleep handoff. It is not reloaded
+Artwork is selected, read and composited before the sleep handoff. It is not reloaded
 during sleep or on charging updates. Replacing it takes effect on the next
 sleep. Reader-page pixels, source artwork and saved book state are unchanged.
 

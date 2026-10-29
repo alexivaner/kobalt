@@ -7,10 +7,13 @@
 #include "support/strings.h"
 
 #include <QFontMetrics>
+#include <QDir>
 #include <QFile>
 #include <QImageReader>
 #include <QPainter>
 #include <QtMath>
+#include <algorithm>
+#include <random>
 
 namespace kobalt::reader {
 QString sleepStatusText(SleepStatus status) {
@@ -66,8 +69,24 @@ QImage sleepOverlayScreen(QImage background, const QString &path) {
     if (size.isEmpty() || qint64(size.width()) * size.height() > maximumPixels) {
         return {};
     }
-    const auto overlay = reader.read();
+    auto overlay = reader.read();
     if (overlay.isNull() || !overlay.hasAlphaChannel()) {
+        return {};
+    }
+    // RGBA PNGs can still be fully opaque. Do not let ordinary wallpapers
+    // in the same folder hide the book cover.
+    overlay = overlay.convertToFormat(QImage::Format_ARGB32);
+    bool transparent = false;
+    for (int y = 0; y < overlay.height() && !transparent; ++y) {
+        const auto *pixels = reinterpret_cast<const QRgb *>(overlay.constScanLine(y));
+        for (int x = 0; x < overlay.width(); ++x) {
+            if (qAlpha(pixels[x]) < 255) {
+                transparent = true;
+                break;
+            }
+        }
+    }
+    if (!transparent) {
         return {};
     }
     QPainter painter(&background);
@@ -75,6 +94,23 @@ QImage sleepOverlayScreen(QImage background, const QString &path) {
     painter.drawImage(background.rect(), overlay);
     painter.end();
     return background;
+}
+
+QImage randomSleepOverlayScreen(QImage background, const QString &directory, const QString &fallback) {
+    if (!directory.isEmpty()) {
+        const QDir folder(directory);
+        auto names = folder.entryList({"*.png"}, QDir::Files | QDir::NoSymLinks);
+        static std::mt19937 generator(std::random_device{}());
+        std::shuffle(names.begin(), names.end(), generator);
+        const int attempts = qMin(32, int(names.size()));
+        for (int i = 0; i < attempts; ++i) {
+            auto image = sleepOverlayScreen(background, folder.filePath(names[i]));
+            if (!image.isNull()) {
+                return image;
+            }
+        }
+    }
+    return sleepOverlayScreen(std::move(background), fallback);
 }
 
 QRect sleepScreenCardRect(QSize size, bool showRemaining) {
